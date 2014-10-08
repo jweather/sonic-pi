@@ -61,6 +61,7 @@ private slots:
 
     void unhighlightCode();
     void runCode();
+    void runSelection();
     void update_mixer_invert_stereo();
     void stopCode();
     void beautifyCode();

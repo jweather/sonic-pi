@@ -845,6 +845,42 @@ void MainWindow::runCode()
 
 }
 
+void MainWindow::runSelection()
+{
+  QsciScintilla *ws = ((QsciScintilla*)tabs->currentWidget());
+  ws->getCursorPosition(&currentLine, &currentIndex);
+
+  errorPane->clear();
+  errorPane->hide();
+  statusBar()->showMessage(tr("Running Code...."), 1000);
+  std::string code = ws->selectedText().toStdString();
+  if (code == "") {
+    // run current line instead?  surrounding top-level block?
+    QMessageBox::critical(this, QString("debug"), QString("no selection"));
+    return;
+  }
+
+  Message msg("/run-code");
+  if(!print_output->isChecked()) {
+    code = "use_debug false #__nosave__ set by Qt GUI user preferences.\n" + code ;
+  }
+  else{
+    code = "use_debug true #__nosave__ set by Qt GUI user preferences.\n" + code ;
+  }
+  if(!check_args->isChecked()) {
+    code = "use_arg_checks false #__nosave__ set by Qt GUI user preferences.\n" + code ;
+  }
+  else {
+    code = "use_arg_checks true #__nosave__ set by Qt GUI user preferences.\n" + code ;
+  }
+  if(clear_output_on_run->isChecked()){
+    outputPane->clear();
+  }
+
+  msg.pushStr(code);
+  sendOSC(msg);
+}
+
  void MainWindow::unhighlightCode()
  {
   ((QsciScintilla*)tabs->currentWidget())->selectAll(false);
@@ -1111,6 +1147,9 @@ void MainWindow::createActions()
   runAct = new QAction(QIcon(":/images/run.png"), tr("Run"), this);
   setupAction(runAct, 'R', tr("Run the code in the current workspace"),
 		 SLOT(runCode()));
+
+  new QShortcut(QKeySequence(Qt::CTRL + Qt::Key_Return), this, 
+		SLOT(runSelection()));
 
   // Stop
   stopAct = new QAction(QIcon(":/images/stop.png"), tr("Stop"), this);

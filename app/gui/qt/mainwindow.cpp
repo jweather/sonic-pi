@@ -856,7 +856,6 @@ void MainWindow::runSelection()
   std::string code = ws->selectedText().toStdString();
   if (code == "") {
     // run current line instead?  surrounding top-level block?
-    QMessageBox::critical(this, QString("debug"), QString("no selection"));
     return;
   }
 

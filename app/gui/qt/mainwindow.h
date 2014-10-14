@@ -106,6 +106,7 @@ private slots:
     void tabNext();
     void tabPrev();
     void helpContext();
+    void scrollOutput();
 
 private:
 

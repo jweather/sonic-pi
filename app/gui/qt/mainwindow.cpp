@@ -182,11 +182,11 @@ MainWindow::MainWindow(QApplication &app, QSplashScreen &splash) {
   errorPane->setReadOnly(true);
   outputPane->setLineWrapMode(QTextEdit::NoWrap);
 #if defined(Q_OS_WIN)
-  outputPane->setFontFamily("Courier New");
+  outputPane->setStyleSheet("font-family:Courier New;");
 #elif defined(Q_OS_MAC)
-  outputPane->setFontFamily("Menlo");
+  outputPane->setStyleSheet("font-family:Menlo;");
 #else
-  outputPane->setFontFamily("Bitstream Vera Sans Mono");
+  outputPane->setStyleSheet("font-family:Bitstream Vera Sans Mono;");
 #endif
 
   outputPane->document()->setMaximumBlockCount(1000);
@@ -549,22 +549,24 @@ void MainWindow::startOSCListener() {
             std::string thread_name;
             std::string runtime;
             std::string s;
+            std::string textColor;
+            std::string bgColor;
             std::ostringstream ss;
+            std::ostringstream output_string;
 
             Message::ArgReader ar = msg->arg();
             ar.popInt32(job_id);
             ar.popStr(thread_name);
             ar.popStr(runtime);
             ar.popInt32(msg_count);
-            QMetaObject::invokeMethod( outputPane, "setTextColor", Qt::QueuedConnection, Q_ARG(QColor, QColor("#5e5e5e")));
             ss << "[Run " << job_id;
             ss << ", Time " << runtime;
             if(!thread_name.empty()) {
               ss << ", Thread :" << thread_name;
             }
-            ss << "]";
-            QMetaObject::invokeMethod( outputPane, "append", Qt::QueuedConnection,
-                                       Q_ARG(QString, QString::fromStdString(ss.str())) );
+            ss << "]<br/>";
+
+            output_string << ss.str();
 
             for(int i = 0 ; i < msg_count ; i++) {
               ss.str("");
@@ -574,91 +576,89 @@ void MainWindow::startOSCListener() {
 
 #if defined(Q_OS_WIN)
               if(i == (msg_count - 1)) {
-                ss << " └─ ";
+                ss << "&nbsp;└─ ";
               } else {
-                ss << " ├─ ";
+                ss << "&nbsp;├─ ";
               }
 #elif defined(Q_OS_MAC)
               if(i == (msg_count - 1)) {
-                ss << " └─ ";
+                ss << "&nbsp;└─ ";
               } else {
-                ss << " ├─ ";
+                ss << "&nbsp;├─ ";
               }
 #else
   //assuming Raspberry Pi
               if(i == (msg_count - 1)) {
-                ss << " +- ";
+                ss << "&nbsp;+- ";
               } else {
-                ss << " |- ";
+                ss << "&nbsp;|- ";
               }
 #endif
 
 
-              QMetaObject::invokeMethod( outputPane, "append", Qt::QueuedConnection,
-                                         Q_ARG(QString, QString::fromStdString(ss.str())) );
-
+              output_string << ss.str();
 
               ss.str("");
               ss.clear();
 
+              // set defaults
+              textColor = "green";
+              bgColor = "white";
+
               switch(msg_type)
                 {
                 case 0:
-                  QMetaObject::invokeMethod( outputPane, "setTextColor", Qt::QueuedConnection, Q_ARG(QColor, QColor("deeppink")));
+                  textColor = "deeppink";
                   break;
                 case 1:
-                  QMetaObject::invokeMethod( outputPane, "setTextColor", Qt::QueuedConnection, Q_ARG(QColor, QColor("dodgerblue")));
+                  textColor = "dodgerblue";
                   break;
                 case 2:
-                  QMetaObject::invokeMethod( outputPane, "setTextColor", Qt::QueuedConnection, Q_ARG(QColor, QColor("darkorange")));
+                  textColor = "darkorange";
                   break;
                 case 3:
-                  QMetaObject::invokeMethod( outputPane, "setTextColor", Qt::QueuedConnection, Q_ARG(QColor, QColor("red")));
+                  textColor = "red";
                   break;
                 case 4:
-                  QMetaObject::invokeMethod( outputPane, "setTextColor", Qt::QueuedConnection, Q_ARG(QColor, QColor("white")));
-                  QMetaObject::invokeMethod( outputPane, "setTextBackgroundColor", Qt::QueuedConnection, Q_ARG(QColor, QColor("deeppink")));
+                  textColor = "white";
+                  bgColor = "deeppink";
                   break;
                 case 5:
-                  QMetaObject::invokeMethod( outputPane, "setTextColor", Qt::QueuedConnection, Q_ARG(QColor, QColor("white")));
-                  QMetaObject::invokeMethod( outputPane, "setTextBackgroundColor", Qt::QueuedConnection, Q_ARG(QColor, QColor("dodgerblue")));
+                  textColor = "white";
+                  bgColor = "dodgerblue";
                   break;
                 case 6:
-                  QMetaObject::invokeMethod( outputPane, "setTextColor", Qt::QueuedConnection, Q_ARG(QColor, QColor("white")));
-                  QMetaObject::invokeMethod( outputPane, "setTextBackgroundColor", Qt::QueuedConnection, Q_ARG(QColor, QColor("darkorange")));
+                  textColor = "white";
+                  bgColor = "darkorange";
                   break;
                 default:
-                  QMetaObject::invokeMethod( outputPane, "setTextColor", Qt::QueuedConnection, Q_ARG(QColor, QColor("green")));
+                  textColor = "green";
                 }
 
-              ss << s;
+              QString formatted = QString("<span style=\"color:%2; background-color:%3;\">%1</span><br/>")
+		.arg(QString::fromStdString(s),
+		     QString::fromStdString(textColor),
+		     QString::fromStdString(bgColor));
 
-              QMetaObject::invokeMethod( outputPane, "insertPlainText", Qt::QueuedConnection,
-                                         Q_ARG(QString, QString::fromStdString(ss.str())) );
-
-              QMetaObject::invokeMethod( outputPane, "setTextColor", Qt::QueuedConnection, Q_ARG(QColor, QColor("#5e5e5e")));
-              QMetaObject::invokeMethod( outputPane, "setTextBackgroundColor", Qt::QueuedConnection, Q_ARG(QColor, QColor("white")));
-
-
-
-              }
-            QMetaObject::invokeMethod( outputPane, "append", Qt::QueuedConnection,
-                                       Q_ARG(QString,  QString::fromStdString(" ")) );
+              output_string << ss.str() << formatted.toStdString();
+	    } // for i
+	    output_string << "<br/><br/>";
+	    QMetaObject::invokeMethod( outputPane, "insertHtml",
+				       Qt::QueuedConnection,
+				       Q_ARG(QString, QString::fromStdString(output_string.str())) );
+	    QMetaObject::invokeMethod(this, "scrollOutput", Qt::QueuedConnection);
           }
+
           else if (msg->match("/info")) {
             std::string s;
             if (msg->arg().popStr(s).isOkNoMoreArgs()) {
               // Evil nasties!
               // See: http://www.qtforum.org/article/26801/qt4-threads-and-widgets.html
 
-              QMetaObject::invokeMethod( outputPane, "setTextColor", Qt::QueuedConnection, Q_ARG(QColor, QColor("white")));
-              QMetaObject::invokeMethod( outputPane, "setTextBackgroundColor", Qt::QueuedConnection, Q_ARG(QColor, QColor("#5e5e5e")));
+              QString formatted = QString("<span style=\"color:white; background-color:#5e5e5e;\">=> %1</span><br/><br/><br/>").arg(QString::fromStdString(s));
+              QMetaObject::invokeMethod(outputPane, "insertHtml", Qt::QueuedConnection, Q_ARG(QString, formatted));
+	      QMetaObject::invokeMethod(this, "scrollOutput", Qt::QueuedConnection);
 
-              QMetaObject::invokeMethod( outputPane, "append", Qt::QueuedConnection,
-                                         Q_ARG(QString, QString::fromStdString("=> " + s + "\n")) );
-
-              QMetaObject::invokeMethod( outputPane, "setTextColor", Qt::QueuedConnection, Q_ARG(QColor, QColor("#5e5e5e")));
-              QMetaObject::invokeMethod( outputPane, "setTextBackgroundColor", Qt::QueuedConnection, Q_ARG(QColor, QColor("white")));
             } else {
               std::cout << "Server: unhandled info message: "<< std::endl;
             }
@@ -1503,5 +1503,8 @@ void MainWindow::tabPrev() {
   QMetaObject::invokeMethod(tabs, "setCurrentIndex", Q_ARG(int, index));
 }
 
+void MainWindow::scrollOutput() {
+  outputPane->ensureCursorVisible();
+}
 
 #include "ruby_help.h"

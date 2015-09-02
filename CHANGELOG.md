@@ -1,5 +1,5 @@
 # History
-* [v2.6 (#v2.7), In development
+* [v2.7-dev](#v2.7), In development
 * [v2.6 'Algorave'](#v2.6), 30th July, 2015
 * [v2.5 'Craft'](#v2.5), 13th April, 2015
 * [v2.4 'Defrost'](#v2.4), 11th Feb, 2015
@@ -222,7 +222,7 @@ most powerful text editor in use by wizard programmers today.
 
 ### New
 
-1* Support for programming [Minecraft Pi Edition](http://pi.minecraft.net).
+* Support for programming [Minecraft Pi Edition](http://pi.minecraft.net).
 * `sync` now accepts multiple cue ids and will sync on the first matching id.
 * New fn `pitch_ratio` for converting a midi note to a frequency
   ratio. Useful for tuning samples.

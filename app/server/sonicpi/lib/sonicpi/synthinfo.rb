@@ -119,6 +119,17 @@ module SonicPi
       @cached_bpm_scale_args = args_to_scale
     end
 
+    def slide_args
+      return @cached_slide_args if @cached_slide_args
+
+      slide_args = []
+      @info.each do |k, v|
+        slide_args << k if v[:bpm_scale] && k.to_s.end_with?("slide")
+      end
+
+      @cached_slide_args = slide_args
+    end
+
     def arg_info
       #Specifically for doc usage. Consider changing name to doc_info
       #Don't call as part of audio loops as slow. Use .info directly
@@ -158,7 +169,7 @@ module SonicPi
     end
 
     def generic_slide_shape_doc(k)
-      return "Shape of curve. 0: step, 1: linear, 3: sine, 4: welch, 5: custom (use curvature param), 6: squared, 7: cubed"
+      return "Shape of curve. 0: step, 1: linear, 3: sine, 4: welch, 5: custom (use *_slide_curve: opt e.g. amp_slide_curve:), 6: squared, 7: cubed. "
     end
 
     private
@@ -306,6 +317,13 @@ module SonicPi
         {
           :doc => "Amplitude level reached after attack phase and immediately before decay phase",
           :validations => [v_positive(:attack_level)],
+          :modulatable => false
+        },
+
+        :decay_level =>
+        {
+          :doc => "Amplitude level reached after decay phase and immediately before sustain phase. Defaults to sustain_level unless explicitly set",
+          :validations => [v_positive(:decay_level)],
           :modulatable => false
         },
 
@@ -508,6 +526,7 @@ module SonicPi
         :sustain => 0,
         :release => 1,
         :attack_level => 1,
+        :decay_level => :sustain_level,
         :sustain_level => 1,
         :env_curve => 2
       }
@@ -569,6 +588,7 @@ module SonicPi
         :sustain => 0,
         :release => 1,
         :attack_level => 1,
+        :decay_level => :sustain_level,
         :sustain_level => 1,
         :env_curve => 2
       }
@@ -608,7 +628,7 @@ module SonicPi
     end
 
     def doc
-      "A simple pulse wave with a low pass filter. This defaults to a square wave, but the timbre can be changed dramatically by adjusting the pulse_width arg between 0 and 1. The pulse wave is thick and heavy with lower notes and is a great ingredient for bass sounds."
+      "A simple square wave with a low pass filter. The square wave is thick and heavy with lower notes and is a great ingredient for bass sounds. If you wish to modulate the width of the square wave see the synth pulse."
     end
 
     def arg_defaults
@@ -631,6 +651,7 @@ module SonicPi
         :sustain => 0,
         :release => 1,
         :attack_level => 1,
+        :decay_level => :sustain_level,
         :sustain_level => 1,
         :env_curve => 2,
 
@@ -656,7 +677,7 @@ module SonicPi
     end
 
     def doc
-      "A simple square wave with a low pass filter. The square wave is thick and heavy with lower notes and is a great ingredient for bass sounds. If you wish to modulate the width of the square wave see the synth pulse."
+      "A simple pulse wave with a low pass filter. This defaults to a square wave, but the timbre can be changed dramatically by adjusting the pulse_width arg between 0 and 1. The pulse wave is thick and heavy with lower notes and is a great ingredient for bass sounds."
     end
 
     def arg_defaults
@@ -771,6 +792,7 @@ module SonicPi
         :sustain => 0,
         :release => 1,
         :attack_level => 1,
+        :decay_level => :sustain_level,
         :sustain_level => 1,
         :env_curve => 2,
 
@@ -824,6 +846,7 @@ module SonicPi
         :sustain => 0,
         :release => 1,
         :attack_level => 1,
+        :decay_level => :sustain_level,
         :sustain_level => 1,
         :env_curve => 2,
 
@@ -948,6 +971,7 @@ module SonicPi
         :sustain => 0,
         :release => 1,
         :attack_level => 1,
+        :decay_level => :sustain_level,
         :sustain_level => 1,
         :env_curve => 2,
 
@@ -1012,6 +1036,7 @@ module SonicPi
         :sustain => 0,
         :release => 1,
         :attack_level => 1,
+        :decay_level => :sustain_level,
         :sustain_level => 1,
         :env_curve => 2,
 
@@ -1081,6 +1106,7 @@ module SonicPi
         :sustain => 0,
         :release => 1,
         :attack_level => 1,
+        :decay_level => :sustain_level,
         :sustain_level => 1,
         :env_curve => 2,
 
@@ -1145,6 +1171,7 @@ module SonicPi
         :sustain => 0,
         :release => 1,
         :attack_level => 1,
+        :decay_level => :sustain_level,
         :sustain_level => 1,
         :env_curve => 2,
 
@@ -1209,6 +1236,7 @@ module SonicPi
         :sustain => 0,
         :release => 1,
         :attack_level => 1,
+        :decay_level => :sustain_level,
         :sustain_level => 1,
         :env_curve => 2,
 
@@ -1277,6 +1305,7 @@ module SonicPi
         :sustain => 0,
         :release => 1,
         :attack_level => 1,
+        :decay_level => :sustain_level,
         :sustain_level => 1,
         :env_curve => 2,
 
@@ -1293,6 +1322,7 @@ module SonicPi
         :cutoff_sustain => :sustain,
         :cutoff_release => :release,
         :cutoff_attack_level => 1,
+        :cutoff_decay_level => :cutoff_sustain_level,
         :cutoff_sustain_level => 1,
         :res => 0.9,
         :res_slide => 0,
@@ -1443,6 +1473,7 @@ module SonicPi
         :sustain => 0,
         :release => 1,
         :attack_level => 1,
+        :decay_level => :sustain_level,
         :sustain_level => 1,
         :env_curve => 2,
 
@@ -1495,6 +1526,7 @@ module SonicPi
           :sustain => 0,
           :release => 1,
           :attack_level => 1,
+          :decay_level => :sustain_level,
           :sustain_level => 1,
           :env_curve => 2,
           :cutoff => 130,
@@ -1541,6 +1573,7 @@ module SonicPi
         :sustain => 0,
         :release => 0.85,
         :attack_level => 1,
+        :decay_level => :sustain_level,
         :sustain_level => 1,
         :env_curve => 2,
 
@@ -1692,6 +1725,7 @@ module SonicPi
         :sustain => 0,
         :release => 1,
         :attack_level => 1,
+        :decay_level => :sustain_level,
         :sustain_level => 1,
         :env_curve => 2,
 
@@ -1743,6 +1777,7 @@ module SonicPi
         :sustain => 0,
         :release => 1,
         :attack_level => 1,
+        :decay_level => :sustain_level,
         :sustain_level => 1,
         :env_curve => 2,
 
@@ -1847,6 +1882,7 @@ module SonicPi
         :sustain => 0,
         :release => 4.0,
         :attack_level => 1,
+        :decay_level => :sustain_level,
         :sustain_level => 1,
         :env_curve => 2
       }
@@ -1903,6 +1939,7 @@ module SonicPi
         :sustain => 0,
         :release => 4.0,
         :attack_level => 1,
+        :decay_level => :sustain_level,
         :sustain_level => 1,
         :env_curve => 2
       }
@@ -1961,6 +1998,7 @@ module SonicPi
         :sustain => 0,
         :release => 1,
         :attack_level => 1,
+        :decay_level => :sustain_level,
         :sustain_level => 1,
         :env_curve => 2,
 
@@ -2042,6 +2080,7 @@ module SonicPi
         :sustain => 0,
         :release => 1,
         :attack_level => 1,
+        :decay_level => :sustain_level,
         :sustain_level => 1,
 
         :cutoff => 100,
@@ -2184,6 +2223,7 @@ module SonicPi
         :sustain => 0,
         :release => 1,
         :attack_level => 1,
+        :decay_level => :sustain_level,
         :sustain_level => 1,
         :env_curve => 2,
 
@@ -2236,6 +2276,7 @@ module SonicPi
         :sustain => 0,
         :release => 1,
         :attack_level => 1,
+        :decay_level => :sustain_level,
         :sustain_level => 1,
         :env_curve => 2,
 
@@ -2402,7 +2443,6 @@ module SonicPi
         :res_slide => 0,
         :res_slide_shape => 5,
         :res_slide_curve => 0,
-        :norm => 0
       }
     end
 
@@ -2411,7 +2451,7 @@ module SonicPi
         :rate =>
         {
           :validations => [v_not_zero(:rate)],
-          :modulatable => true
+          :modulatable => false
         }
       }
     end
@@ -2469,6 +2509,7 @@ module SonicPi
         :release => 0,
 
         :attack_level => 1,
+        :decay_level => :sustain_level,
         :sustain_level => 1,
         :env_curve => 2,
 
@@ -2508,14 +2549,15 @@ module SonicPi
         :sustain =>
         {
           :doc => "Duration of the sustain phase of the envelope.",
-          :validations => [v_positive(:attack)],
+          :validations => [[lambda{|args| v = args[:sustain] ; (v == -1) || (v >= 0)}, "must either be a positive value or -1"]],
+
           :modulatable => false
         },
 
         :release =>
         {
           :doc => "Duration of the release phase of the envelope.",
-          :validations => [[lambda{|args| v = args[:release] ; (v == -1) || (v >= 0)}, "must either be a positive value or -1"]],
+          :validations => [v_positive(:release)],
           :modulatable => false
         },
 
@@ -2552,7 +2594,28 @@ module SonicPi
           :doc => "Filter resonance as a value between 0 and 1. Only functional if a cutoff value is specified. Large amounts of resonance (a res: near 1) can create a whistling sound around the cutoff frequency. Smaller values produce less resonance.",
           :validations => [v_positive(:res), v_less_than(:res, 1)],
           :modulatable => true
-        }
+        },
+
+                :window_size =>
+        {
+          :doc => "Pitch shift works by chopping the input into tiny slices, then playing these slices at a higher or lower rate. If we make the slices small enough and overlap them, it sounds like the original sound with the pitch changed.
+
+The window_size is the length of the slices and is measured in seconds. It needs to be around 0.2 (200ms) or greater for pitched sounds like guitar or bass, and needs to be around 0.02 (20ms) or lower for percussive sounds like drum loops. You can experiment with this to get the best sound for your input.",
+          :validations => [v_greater_than(:window_size, 0.00005)],
+          :modulatable => true
+        },
+        :pitch_dis =>
+        {
+          :doc => "Pitch dispersion - how much random variation in pitch to add. Using a low value like 0.001 can help to \"soften up\" the metallic sounds, especially on drum loops. To be really technical, pitch_dispersion is the maximum random deviation of the pitch from the pitch ratio (which is set by the pitch param)",
+          :validations => [v_greater_than_oet(:pitch_dis, 0)],
+          :modulatable => true
+        },
+        :time_dis =>
+        {
+          :doc => "Time dispersion - how much random delay before playing each grain (measured in seconds). Again, low values here like 0.001 can help to soften up metallic sounds introduced by the effect. Large values are also fun as they can make soundscapes and textures from the input, although you will most likely lose the rhythm of the original. NB - This won't have an effect if it's larger than window_size.",
+          :validations => [v_greater_than_oet(:time_dis, 0)],
+          :modulatable => true
+        },
 
       }
     end
@@ -3100,7 +3163,6 @@ module SonicPi
         :seed =>
         {
           :doc => "Seed value for rand num generator used for probability test",
-          :validations => [v_positive(:seed)],
           :modulatable => false
         },
 
@@ -3324,7 +3386,6 @@ module SonicPi
         :seed =>
         {
           :doc => "Seed value for rand num generator used for probability test",
-          :validations => [v_positive(:seed)],
           :modulatable => false
         },
 
@@ -3413,7 +3474,7 @@ module SonicPi
     end
 
     def doc
-      "Slice the pan automatically from left to right using a variety of different control waves. Behaves similarly to slicer and wobble FX but modifies stereo panning of sound in left and right speakers."
+      "Slice the pan automatically from left to right. Behaves similarly to slicer and wobble FX but modifies stereo panning of sound in left and right speakers. Default slice wave form is square (hard slicing between left and right) however other wave forms can be set with the `wave:` opt."
     end
 
     def arg_defaults
@@ -3506,7 +3567,6 @@ module SonicPi
         :seed =>
         {
           :doc => "Seed value for rand num generator used for probability test",
-          :validations => [v_positive(:seed)],
           :modulatable => false
         },
 
@@ -3984,12 +4044,13 @@ The way the transpositions are done adds some distortion, particularly to the lo
         {
           :doc => "The maximum phase duration in beats.",
           :validations => [v_positive_not_zero(:max_phase)],
-          :modulatable => false
+          :modulatable => false,
+          :bpm_scale => true
         },
 
         :phase =>
         {
-          :doc => "The time between echoes in beats.",
+          :doc => "The time between echoes in beats (phase duration).",
           :validations => [v_positive_not_zero(:phase)],
           :modulatable => true,
           :bpm_scale => false
@@ -4026,7 +4087,7 @@ The way the transpositions are done adds some distortion, particularly to the lo
     end
 
     def doc
-      "Standard chorus with variable phase duration (time between echoes). A type of short echo that usually makes the sound \"thicker\". If you wish to have a phase duration longer than 2s, you need to specify the longest phase duration you'd like with the arg max_phase. Be warned, as with echo, chorus FX with very long phases can consume a lot of memory and take longer to initialise."
+      "Standard chorus with variable phase duration (time between echoes). A type of short echo that usually makes the sound \"thicker\". If you wish to have a phase duration longer than 2 beats, you need to specify the longest phase duration you'd like with the arg max_phase. Be warned, as with echo, chorus FX with very long phases can consume a lot of memory and take longer to initialise."
     end
   end
 
@@ -4927,8 +4988,7 @@ The window_size is the length of the slices and is measured in seconds. It needs
         :desc => "Miscellaneous Sounds",
         :prefix => "misc_",
         :samples => [
-          :misc_burp,
-          :misc_rand_noise]},
+          :misc_burp]},
 
       :perc => {
         :desc => "Percussive Sounds",

@@ -32,7 +32,7 @@ module SonicPi
       @samples = {}
       @recorders = {}
       @recording_mutex = Mutex.new
-      @rand_buf_id = load_sample(samples_path + "/misc_rand_noise.wav")[0].to_i
+      @rand_buf_id = load_sample(buffers_path + "/rand-stream.wav")[0].to_i
       reset
     end
 
@@ -79,7 +79,11 @@ module SonicPi
 
     def start_mixer
       message "Starting mixer"
-      @mixer = @server.trigger_synth(:head, @mixer_group, "sonic-pi-mixer", {"in_bus" => @mixer_bus.to_i}, nil, true)
+      # TODO create a way of swapping these on the fly:
+      # set_mixer! :basic
+      # set_mixer! :default
+      mixer_synth = raspberry_pi_1? ? "sonic-pi-basic_mixer" : "sonic-pi-mixer"
+      @mixer = @server.trigger_synth(:head, @mixer_group, mixer_synth, {"in_bus" => @mixer_bus.to_i}, nil, true)
     end
 
     def volume=(vol)
@@ -93,28 +97,24 @@ module SonicPi
       @server.node_ctl @mixer, {"invert_stereo" => invert_i}, true
     end
 
+    def mixer_control(opts)
+      now = 0
+      opts = opts.clone
+      if opts[:now].is_a?(Numeric)
+        now = opts[:now]
+      else
+        now = opts[:now] ? 1 : 0
+      end
+      opts.delete :now
+      @server.node_ctl @mixer, opts, now
+    end
+
     def mixer_stereo_mode
       @server.node_ctl @mixer, {"force_mono" => 0}, true
     end
 
     def mixer_mono_mode
       @server.node_ctl @mixer, {"force_mono" => 1}, true
-    end
-
-    def mixer_hpf_enable(freq)
-      @server.node_ctl @mixer, {"hpf_pass_thru" => 0, "hpf_freq" => freq}, true
-    end
-
-    def mixer_lpf_enable(freq)
-      @server.node_ctl @mixer, {"lpf_pass_thru" => 0, "lpf_freq" => freq}, true
-    end
-
-    def mixer_lpf_disable
-      @server.node_ctl @mixer, {"lpf_pass_thru" => 1}, true
-    end
-
-    def mixer_hpf_disable
-      @server.node_ctl @mixer, {"hpf_pass_thru" => 1}, true
     end
 
     def status

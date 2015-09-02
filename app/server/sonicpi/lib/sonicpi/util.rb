@@ -62,6 +62,23 @@ module SonicPi
       end
     end
 
+    def host_platform_desc
+      case os
+      when :raspberry
+        if raspberry_pi_1?
+          "Raspberry Pi"
+        else
+          "Raspberry Pi 2"
+        end
+      when :linux
+        "Linux"
+      when :osx
+        "Mac"
+      when :windows
+        "Win"
+      end
+    end
+
     def default_control_delta
       if raspberry_pi_1?
         0.02
@@ -152,6 +169,10 @@ module SonicPi
 
     def samples_path
       File.absolute_path("#{etc_path}/samples")
+    end
+
+    def buffers_path
+      File.absolute_path("#{etc_path}/buffers")
     end
 
     def app_path

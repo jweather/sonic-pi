@@ -52,10 +52,13 @@ class SonicPiScintilla : public QsciScintilla
     int incLineNumWithinBounds(int linenum, int inc);
     void moveLines(int numLines);
     void deselect();
+    void toggleComment();
     void upcaseWordOrSelection();
     void downcaseWordOrSelection();
     void highlightAll();
     void unhighlightAll();
+    void zoomFontIn();
+    void zoomFontOut();
 
  private:
     void addKeyBinding(QSettings &qs, int cmd, int key);

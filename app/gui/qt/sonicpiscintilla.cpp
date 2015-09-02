@@ -415,6 +415,38 @@ void SonicPiScintilla::moveLines(int numLines) {
   }
 }
 
+void SonicPiScintilla::toggleComment() {
+  beginUndoAction();
+
+  int linenum, cursor;
+  getCursorPosition(&linenum, &cursor);
+
+  //select the whole line
+  setSelection(linenum, 0, linenum, cursor+1);
+
+  QString selection = selectedText();
+
+  // make sure we don't comment empty lines
+  if (selection.length() > 0) {
+      // if it's already commented, uncomment
+      if (selection[0] == '#') {
+          selection.remove(0, 1);
+          replaceSelectedText(selection);
+          if (cursor > 0) {
+              setCursorPosition(linenum, cursor - 1);
+          } else {
+              setCursorPosition(linenum, cursor);
+          }
+      } else {
+          selection.prepend('#');
+          replaceSelectedText(selection);
+          setCursorPosition(linenum, cursor + 1);
+      }
+  }
+  deselect();
+  endUndoAction();
+}
+
 void SonicPiScintilla::upcaseWordOrSelection(){
   if(hasSelectedText()) {
     SendScintilla(SCI_UPPERCASE);
@@ -454,4 +486,20 @@ void SonicPiScintilla::setLineErrorMarker(int lineNumber){
 
 void SonicPiScintilla::clearLineMarkers(){
   markerDeleteAll(-1);
+}
+
+void SonicPiScintilla::zoomFontIn() {
+  int zoom = property("zoom").toInt();
+  zoom++;
+  if (zoom > 20) zoom = 20;
+  setProperty("zoom", QVariant(zoom));
+  zoomTo(zoom);
+}
+
+void SonicPiScintilla::zoomFontOut() {
+  int zoom = property("zoom").toInt();
+  zoom--;
+  if (zoom < -10) zoom = -10;
+  setProperty("zoom", QVariant(zoom));
+  zoomTo(zoom);
 }

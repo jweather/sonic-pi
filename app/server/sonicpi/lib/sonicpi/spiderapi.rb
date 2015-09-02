@@ -260,6 +260,8 @@ end
 
 
     def stop
+      # Schedule messages
+      __schedule_delayed_blocks_and_messages!
       raise SonicPi::Stop
     end
     doc name:           :stop,
@@ -713,6 +715,10 @@ end"]
       raise "live_loop #{name.inspect} must be called with a do/end block" unless block
 
       args_h = resolve_synth_opts_hash_or_array(args)
+
+      delay = args_h[:delay]
+      raise "live_loop's delay: opt must be a number, got #{delay.inspect}" if delay && !delay.is_a?(Numeric)
+
       if args_h.has_key? :auto_cue
         auto_cue = args_h[:auto_cue]
       else
@@ -732,13 +738,14 @@ end"]
         raise "Live loop block must only accept 0 or 1 args"
       end
 
-      in_thread(name: ll_name) do
+      in_thread(name: ll_name, delay: delay) do
         Thread.current.thread_variable_set :sonic_pi__not_inherited__live_loop_auto_cue, auto_cue
         if args_h.has_key?(:init)
           res = args_h[:init]
         else
           res = 0
         end
+        use_random_seed args_h[:seed] if args_h[:seed]
         loop do
           t1 = Thread.current.thread_variable_get(:sonic_pi_spider_time)
           Thread.current.thread_variable_set(:sonic_pi_spider_synced, false)
@@ -759,7 +766,10 @@ end"]
         summary:        "A loop for live coding",
         args:           [[:name, :symbol]],
         opts:           {:init     => "initial value for optional block arg",
-                         :auto_cue => "enable or disable automatic cue (default is true)"},
+                         :auto_cue => "enable or disable automatic cue (default is true)",
+                         :delay    => "Initial delay in beats before the live_loop starts. Default is 0.",
+                         :seed     => "override initial random generator seed before starting loop."
+    },
         accepts_block:  true,
         requires_block: true,
         async_block:    true,
@@ -1328,8 +1338,7 @@ end"]
       end
 
       range = (min - max).abs
-      rgen = Thread.current.thread_variable_get :sonic_pi_spider_random_generator
-      r = rgen.rand(range.to_f)
+      r = SonicPi::Core::SPRand.rand(range)
       smallest = [min, max].min
 
       if res
@@ -1360,8 +1369,7 @@ end"]
     def rrand_i(min, max)
       return min if min == max
       range = (min - max).abs
-      rgen = Thread.current.thread_variable_get :sonic_pi_spider_random_generator
-      r = rgen.rand(range.to_i + 1)
+      r = SonicPi::Core::SPRand.rand_i(range.to_i + 1)
       smallest = [min, max].min
       (r + smallest)
     end
@@ -1384,10 +1392,12 @@ end"]
 
 
     def rand(max=1)
-      max = 0..1 if max == 0
-      rgen = Thread.current.thread_variable_get :sonic_pi_spider_random_generator
-      limit = max.is_a?(Range) ? Range.new(*[max.min, max.max].map(&:to_f)) : max.to_f
-      rgen.rand(limit)
+      return 0.0 if max == 0
+      if max.is_a?(Range)
+        rrand(max.min, max.max)
+      else
+        SonicPi::Core::SPRand.rand(max)
+      end
     end
     doc name:           :rand,
         introduced:     Version.new(2,0,0),
@@ -1396,7 +1406,7 @@ end"]
         opts:           nil,
         accepts_block:  false,
         intro_fn:       true,
-        doc:            "Given a max number, produces a float between `0` and the supplied max value. If max is a range, produces a float within the range. With no args or max as `0`, returns a random value between `0` and `1`.",
+        doc:            "Given a max number, produces a float between `0` and the supplied max value. If max is a range, produces a float within the range. With no args returns a random value between `0` and `1`.",
         examples:       ["
 print rand(0.5) #=> will print a number like 0.397730007820797 to the output pane"]
 
@@ -1404,10 +1414,12 @@ print rand(0.5) #=> will print a number like 0.397730007820797 to the output pan
 
 
     def rand_i(max=2)
-      max = 0..1 if max == 0
-      rgen = Thread.current.thread_variable_get :sonic_pi_spider_random_generator
-      limit = max.is_a?(Range) ? Range.new(*[max.min, max.max].map(&:to_i)) : max.to_i
-      rgen.rand(limit)
+      return 0 if max == 0
+      if max.is_a?(Range)
+        rrand_i(max.min, max.max)
+      else
+        SonicPi::Core::SPRand.rand_i(max)
+      end
     end
     doc name:           :rand_i,
         introduced:     Version.new(2,0,0),
@@ -1415,7 +1427,7 @@ print rand(0.5) #=> will print a number like 0.397730007820797 to the output pan
         args:           [[:max, :number_or_range]],
         opts:           nil,
         accepts_block:  false,
-        doc:            "Given a max number, produces a whole number between `0` and the supplied max value exclusively. If max is a range produces an int within the range. With no args or max as `0` returns either `0` or `1`",
+        doc:            "Given a max number, produces a whole number between `0` and the supplied max value exclusively. If max is a range produces an int within the range. With no args returns either `0` or `1`",
         examples:       ["
 print rand_i(5) #=> will print a either 0, 1, 2, 3, or 4 to the output pane"]
 
@@ -1444,9 +1456,7 @@ shuffle \"foobar\"  #=> Would return something like: \"roobfa\""    ]
 
     def use_random_seed(seed, &block)
       raise "use_random_seed does not work with a block. Perhaps you meant with_random_seed" if block
-      Thread.current.thread_variable_set :sonic_pi_spider_random_generator, Random.new(seed)
-      thread_seed = Random.new(seed).rand(THREAD_RAND_SEED_MAX)
-      Thread.current.thread_variable_set :sonic_pi_spider_new_thread_random_generator, Random.new(thread_seed)
+      SonicPi::Core::SPRand.set_seed! seed
     end
     doc name:          :use_random_seed,
         introduced:    Version.new(2,0,0),
@@ -1496,14 +1506,10 @@ end
 
     def with_random_seed(seed, &block)
       raise "with_random_seed requires a block. Perhaps you meant use_random_seed" unless block
-      current_rgen = Thread.current.thread_variable_get :sonic_pi_spider_random_generator
-      current_thread_rgen = Thread.current.thread_variable_get :sonic_pi_spider_new_thread_random_generator
-      Thread.current.thread_variable_set :sonic_pi_spider_random_generator, Random.new(seed)
-      thread_seed = Random.new(seed).rand(THREAD_RAND_SEED_MAX)
-      Thread.current.thread_variable_set :sonic_pi_spider_new_thread_random_generator, Random.new(thread_seed)
+      current_seed = SonicPi::Core::SPRand.get_seed
+      SonicPi::Core::SPRand.set_seed! seed
       block.call
-      Thread.current.thread_variable_set :sonic_pi_spider_random_generator, current_rgen
-      Thread.current.thread_variable_set :sonic_pi_spider_new_thread_random_generator, current_thread_rgen
+      SonicPi::Core::SPRand.set_seed! current_seed
     end
     doc name:           :with_random_seed,
         introduced:     Version.new(2,0,0),
@@ -1622,13 +1628,24 @@ cue :quux # cue is displayed in log
 
     def use_bpm(bpm, &block)
       raise "use_bpm does not work with a block. Perhaps you meant with_bpm" if block
+      raise "use_bpm's BPM should be a positive value. You tried to use: #{bpm}" unless bpm > 0
       sleep_mul = 60.0 / bpm
       Thread.current.thread_variable_set(:sonic_pi_spider_sleep_mul, sleep_mul)
     end
     doc name:           :use_bpm,
         introduced:     Version.new(2,0,0),
         summary:        "Set the tempo",
-        doc:            "Sets the tempo in bpm (beats per minute) for everything afterwards. Affects all subsequent calls to `sleep` and all temporal synth arguments which will be scaled to match the new bpm. If you wish to bypass scaling in calls to sleep, see the fn `rt`. Also, if you wish to bypass time scaling in synth args see `use_arg_bpm_scaling`. See also `with_bpm` for a block scoped version of `use_bpm`.",
+        doc:            "Sets the tempo in bpm (beats per minute) for everything afterwards. Affects all subsequent calls to `sleep` and all temporal synth arguments which will be scaled to match the new bpm. If you wish to bypass scaling in calls to sleep, see the fn `rt`. Also, if you wish to bypass time scaling in synth args see `use_arg_bpm_scaling`. See also `with_bpm` for a block scoped version of `use_bpm`.
+
+For dance music here's a rough guide for which BPM to aim for depending on your genre:
+
+* Dub: 60-90 bpm
+* Hip-hop: 60-100 bpm
+* Downtempo: 90-120 bpm
+* House: 115-130 bpm
+* Techno/trance: 120-140 bpm
+* Dubstep: 135-145 bpm
+* Drum and bass: 160-180 bpm",
         args:           [[:bpm, :number]],
         opts:           nil,
         accepts_block:  false,
@@ -1665,6 +1682,7 @@ end
 
     def with_bpm(bpm, &block)
       raise "with_bpm must be called with a do/end block. Perhaps you meant use_bpm" unless block
+      raise "with_bpm's BPM should be a positive value. You tried to use: #{bpm}" unless bpm > 0
       current_mul = Thread.current.thread_variable_get(:sonic_pi_spider_sleep_mul)
       sleep_mul = 60.0 / bpm
       Thread.current.thread_variable_set(:sonic_pi_spider_sleep_mul, sleep_mul)
@@ -1674,7 +1692,18 @@ end
     doc name:           :with_bpm,
         introduced:     Version.new(2,0,0),
         summary:        "Set the tempo for the code block",
-        doc:            "Sets the tempo in bpm (beats per minute) for everything in the given block. Affects all containing calls to `sleep` and all temporal synth arguments which will be scaled to match the new bpm. See also `use_bpm`",
+        doc:            "Sets the tempo in bpm (beats per minute) for everything in the given block. Affects all containing calls to `sleep` and all temporal synth arguments which will be scaled to match the new bpm. See also `use_bpm`
+
+For dance music here's a rough guide for which BPM to aim for depending on your genre:
+
+* Dub: 60-90 bpm
+* Hip-hop: 60-100 bpm
+* Downtempo: 90-120 bpm
+* House: 115-130 bpm
+* Techno/trance: 120-140 bpm
+* Dubstep: 135-145 bpm
+* Drum and bass: 160-180 bpm
+",
         args:           [[:bpm, :number]],
         opts:           nil,
         accepts_block:  true,
@@ -1710,6 +1739,7 @@ end"]
 
     def with_bpm_mul(mul, &block)
       raise "with_bpm_mul must be called with a do/end block. Perhaps you meant use_bpm_mul" unless block
+      raise "use_bpm_mul's mul should be a positive value. You tried to use: #{mul}" unless mul > 0
       current_mul = Thread.current.thread_variable_get(:sonic_pi_spider_sleep_mul)
       new_mul = current_mul.to_f / mul
       Thread.current.thread_variable_set(:sonic_pi_spider_sleep_mul, new_mul)
@@ -1743,6 +1773,7 @@ sleep 1            # BPM is now back to 60, therefore sleep is 1 second
 
     def use_bpm_mul(mul, &block)
       raise "use_bpm_mul must not be called with a block. Perhaps you meant with_bpm_mul" if block
+      raise "use_bpm_mul's mul should be a positive value. You tried to use: #{mul}" unless mul > 0
       current_mul = Thread.current.thread_variable_get(:sonic_pi_spider_sleep_mul)
       new_mul = current_mul.to_f / mul
       Thread.current.thread_variable_set(:sonic_pi_spider_sleep_mul, new_mul)
@@ -1771,15 +1802,14 @@ play 62
 
     def density(d, &block)
       raise "density must be a positive number" unless d.is_a?(Numeric) && d >= 0
-      d = d.abs
       reps = d < 1 ? 1.0 : d
       with_bpm_mul d do
         if block.arity == 0
-          d.times do
+          reps.times do
             block.call
           end
         else
-          d.times do |idx|
+          reps.times do |idx|
             block.call idx
           end
         end
@@ -1788,7 +1818,7 @@ play 62
     doc name:           :density,
         introduced:     Version.new(2,3,0),
         summary:        "Squash and repeat time",
-        doc:            "Runs the block `d` times with the bpm for the block also multiplied by `d`. Great for repeating sections a number of times faster yet keeping within a fixed time.",
+        doc:            "Runs the block `d` times with the bpm for the block also multiplied by `d`. Great for repeating sections a number of times faster yet keeping within a fixed time. If `d` is less than 1, then time will be stretched accordingly and the block will take longer to complete.",
         args:           [[:d, :density]],
         opts:           nil,
         accepts_block:  true,
@@ -1805,6 +1835,14 @@ end",
 density 2 do |idx| # You may also pass a param to the block similar to n.times
   puts idx         # prints out 0, 1
   sleep 0.5        # sleep is 0.25s
+end
+",
+"
+density 0.5 do          # Specifying a density val of < 1 will stretch out time
+                        # A density of 0.5 will double the length of the block's
+                        # execution time.
+  play 80, release: 1   # plays note 80 with 2s release
+  sleep 0.5             # sleep is 1s
 end
 "    ]
 
@@ -1869,12 +1907,12 @@ play 72"]
 
 
     def sleep(beats)
+      # Schedule messages
+      __schedule_delayed_blocks_and_messages!
+
       return if beats == 0
       # Grab the current virtual time
       last_vt = Thread.current.thread_variable_get :sonic_pi_spider_time
-
-      # Schedule messages
-      __schedule_delayed_blocks_and_messages!
 
       # Now get on with syncing the rest of the sleep time...
 
@@ -1995,6 +2033,7 @@ play 62
 
       payload = {
         :time => Thread.current.thread_variable_get(:sonic_pi_spider_time),
+        :sleep_mul => Thread.current.thread_variable_get(:sonic_pi_spider_sleep_mul),
         :run => current_job_id,
         :cue_map => args_h,
         :cue => cue_id
@@ -2085,8 +2124,8 @@ end"
 
 
 
-
-    def sync(*cue_ids)
+    def sync(cue_ids, opts={})
+      cue_ids = [cue_ids] if cue_ids.is_a?(Symbol) || cue_ids.is_a?(String)
       raise "sync needs at least one cue id to sync on. You specified 0" unless cue_ids.size > 0
       Thread.current.thread_variable_set(:sonic_pi_spider_synced, true)
       p = Promise.new
@@ -2108,26 +2147,32 @@ end"
 
       payload = p.get
       time = payload[:time]
+      sleep_mul = payload[:sleep_mul]
+      bpm_sync = opts.has_key?(:bpm_sync) ? opts[:bpm_sync] : true
       run_id = payload[:run]
       cue_map = payload[:cue_map]
       cue_map = cue_map.dup if cue_map
       cue_map = cue_map || {}
       cue_id = payload[:cue]
       cue_map[:cue] = cue_id
-
       Thread.current.thread_variable_set :sonic_pi_spider_time, time
+      Thread.current.thread_variable_set(:sonic_pi_spider_sleep_mul, sleep_mul) if bpm_sync
 
       unless Thread.current.thread_variable_get(:sonic_pi_suppress_cue_logging)
-        __delayed_highlight2_message "synced #{cue_id.inspect} (Run #{run_id})"
+        if bpm_sync
+          __delayed_highlight2_message "synced #{cue_id.inspect}. Inheriting bpm of #{current_bpm} (Run #{run_id})"
+        else
+          __delayed_highlight2_message "synced #{cue_id.inspect} (Run #{run_id})"
+        end
       end
       cue_map
     end
     doc name:           :sync,
         introduced:     Version.new(2,0,0),
         summary:        "Sync with other threads",
-        doc:            "Pause/block the current thread until a `cue` heartbeat with a matching `cue_id` is received. When a matching `cue` message is received, unblock the current thread, and continue execution with the virtual time set to match the thread that sent the `cue` heartbeat. The current thread is therefore synced to the `cue` thread. If multiple cue ids are passed as arguments, it will `sync` on the first matching `cue_id`",
+        doc:            "Pause/block the current thread until a `cue` heartbeat with a matching `cue_id` is received. When a matching `cue` message is received, unblock the current thread, and continue execution with the virtual time set to match the thread that sent the `cue` heartbeat. The current thread is therefore synced to the `cue` thread. If multiple cue ids are passed as arguments, it will `sync` on the first matching `cue_id`. By default the BPM of the cueing thread is inherited. This can be disabled using the bpm_sync: opt.",
         args:           [[:cue_id, :symbol]],
-        opts:           nil,
+        opts:           {:bpm_sync => "Inherit the BPM of the cueing thread. Default is true"},
         accepts_block:  false,
         advances_time:  true,
         examples:       ["
@@ -2195,6 +2240,9 @@ end"]
     def in_thread(*opts, &block)
       args_h = resolve_synth_opts_hash_or_array(opts)
       name = args_h[:name]
+      delay = args_h[:delay]
+
+      raise "in_thread's delay: opt must be a number, got #{delay.inspect}" if delay && !delay.is_a?(Numeric)
 
       parent_t = Thread.current
 
@@ -2216,9 +2264,13 @@ end"]
       job_id = __current_job_id
       reg_with_parent_completed = Promise.new
 
-      rgen = Thread.current.thread_variable_get :sonic_pi_spider_new_thread_random_generator
-      new_rand_seed = args_h[:seed] || rgen.rand(999999999999999999999999999999999999999)
-
+      if args_h[:seed]
+        new_rand_seed = args_h[:seed]
+      else
+        new_thread_gen_idx = Thread.current.thread_variable_get :sonic_pi_spider_new_thread_random_gen_idx
+        new_rand_seed = SonicPi::Core::SPRand.rand(441000, new_thread_gen_idx)
+        Thread.current.thread_variable_set :sonic_pi_spider_new_thread_random_gen_idx, new_thread_gen_idx + 1
+      end
       # Create the new thread
       t = Thread.new do
         Thread.current.thread_variable_set(:sonic_pi_thread_group, :job_subthread)
@@ -2267,7 +2319,9 @@ end"]
         # then essentially turns into waiting for each no_kill mutext for
         # every sub-in_thread before killing them.
         Thread.current.thread_variable_set :sonic_pi_spider_no_kill_mutex, Mutex.new
-        Thread.current.thread_variable_set :sonic_pi_spider_random_generator, Random.new(new_rand_seed)
+
+        SonicPi::Core::SPRand.set_seed!(new_rand_seed)
+
 
         # Wait for parent to deliver promise. Throws an exception if
         # parent dies before the promise is delivered, thus stopping
@@ -2281,6 +2335,7 @@ end"]
 
         # Actually run the thread code specified by the user!
         begin
+          sleep delay if delay
           block.call
           # ensure delayed jobs and messages are honoured for this
           # thread:
@@ -2293,7 +2348,12 @@ end"]
             __schedule_delayed_blocks_and_messages!
           end
         rescue Exception => e
-          __error e
+            if name
+            __error e, "Thread death +--> #{name.inspect}"
+          else
+            __error e, "Thread death!"
+          end
+
         end
 
         # Disassociate thread with job as it has now finished
@@ -2323,7 +2383,8 @@ end"]
         summary:        "Run code block at the same time",
         doc:            "Execute a given block (between `do` ... `end`) in a new thread. Use for playing multiple 'parts' at once. Each new thread created inherits all the use/with defaults of the parent thread such as the time, current synth, bpm, default synth args, etc. Despite inheriting defaults from the parent thread, any modifications of the defaults in the new thread will *not* affect the parent thread. Threads may be named with the `name:` optional arg. Named threads will print their name in the logging pane when they print their activity. Finally, if you attempt to create a new named thread with a name that is already in use by another executing thread, no new thread will be created.",
         args:           [],
-        opts:           {:name => "Make this thread a named thread with name"},
+        opts:           {:name  => "Make this thread a named thread with name",
+                         :delay => "Initial delay in beats before the thread starts. Default is 0."},
         accepts_block:  true,
         requires_block: true,
         async_block:    true,
@@ -2413,8 +2474,16 @@ end
 # We'll hear the effect immediately without having to stop and re-start the code.
 # This is because our fn has been redefined, (which our thread will pick up) and
 # due to the thread being named, the second re-run will not create a new similarly
-# named thread. This is a nice pattern for live coding.
-"]
+# named thread. This is a nice pattern for live coding and is the basis of live_loop.
+",
+"
+#Delaying the start of a thread
+in_thread delay: 1 do
+  sample :ambi_lunar_land # this sample is not triggered at time 0 but after 1 beat
+end
+
+play 80                   # Note 80 is played at time 0
+"    ]
 
 
 
